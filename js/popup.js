@@ -48,10 +48,10 @@ document.addEventListener("DOMContentLoaded", async () => {
  */
 async function loadSettings() {
   const settings = await chrome.storage.local.get(defaultSettings);
-  console.log("loaded settings", settings);
   enableExtensionCheckbox.checked = settings.enable;
   showNotificationDotCheckbox.checked = settings.showDot;
   debugModeCheckbox.checked = settings.debug;
+  updateDependentControls();
 }
 
 /**
@@ -62,7 +62,6 @@ async function saveSettings(newSettings) {
   try {
     const currentSettings = await chrome.storage.local.get(defaultSettings);
     const mergedSettings = { ...currentSettings, ...newSettings };
-    console.log("saving settings", mergedSettings);
     await chrome.storage.local.set(mergedSettings);
   } catch (error) {
     console.error("Error saving settings:", error);
@@ -79,6 +78,7 @@ async function saveSettings(newSettings) {
 function setupEventListeners() {
   enableExtensionCheckbox.addEventListener("change", () => {
     saveSettings({ enable: enableExtensionCheckbox.checked });
+    updateDependentControls();
   });
 
   showNotificationDotCheckbox.addEventListener("change", () => {
@@ -88,4 +88,15 @@ function setupEventListeners() {
   debugModeCheckbox.addEventListener("change", () => {
     saveSettings({ debug: debugModeCheckbox.checked });
   });
+}
+
+/**
+ * Updates dependent controls based on extension enable state
+ */
+function updateDependentControls() {
+  const isEnabled = enableExtensionCheckbox.checked;
+  showNotificationDotCheckbox.disabled = !isEnabled;
+  showNotificationDotCheckbox.parentElement.style.opacity = isEnabled ? "1" : "0.5";
+  debugModeCheckbox.disabled = !isEnabled;
+  debugModeCheckbox.parentElement.style.opacity = isEnabled ? "1" : "0.5";
 }

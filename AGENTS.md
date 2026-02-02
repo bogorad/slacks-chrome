@@ -2,6 +2,12 @@
 
 This project uses **bd** (beads) for issue tracking. Run `bd onboard` to get started.
 
+## Versioning
+
+**MANDATORY:** After each code change, however small, bump the patch version (`zz` in `xx.yy.zz`) in:
+- `slacks-extension/manifest.json` → `"version"` field
+- `slacks-extension/popup/popup.html` → footer version display
+
 ## Quick Reference
 
 ```bash
