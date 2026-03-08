@@ -63,6 +63,70 @@ h1 {
   margin: 0;
 }
 
+.color-group {
+  padding: 10px 11px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-muted);
+}
+
+.color-group-header {
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.color-options {
+  display: flex;
+  gap: 8px;
+}
+
+.color-option {
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  border: 2px solid #ffffff;
+  box-shadow: 0 0 0 1px rgba(22, 39, 66, 0.2);
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.color-option:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 0 0 1px rgba(22, 39, 66, 0.35), 0 2px 6px rgba(22, 39, 66, 0.2);
+}
+
+.color-option.selected {
+  box-shadow: 0 0 0 2px var(--focus), 0 0 0 4px rgba(45, 126, 247, 0.2);
+}
+
+.color-option:disabled {
+  opacity: 0.45;
+  cursor: default;
+  transform: none;
+}
+
+.color-pink {
+  background: #ff5fa2;
+}
+
+.color-red {
+  background: #e01e5a;
+}
+
+.color-green {
+  background: #2eb67d;
+}
+
+.color-blue {
+  background: #36c5f0;
+}
+
+.color-yellow {
+  background: #ecb22e;
+}
+
 .toggle-switch {
   display: flex;
   align-items: center;

@@ -152,7 +152,7 @@ Rendering is in `composeFavicon(iconDataUrl, markType)`.
 ### General marker (ring)
 
 - stroke: `#FF5FA2`
-- stroke width: `2.2`
+- stroke width: `4.4`
 - transparent center
 
 ---

@@ -56,19 +56,58 @@ const defaultSettings = {
   enable: false,
   showDot: false,
   debug: false,
+  generalColor: "pink",
+  personalColor: "red",
 };
 
 /** @type {Object} Extension settings */
 let settings;
 
+const COLOR_OPTIONS = {
+  pink: "#FF5FA2",
+  red: "#E01E5A",
+  green: "#2EB67D",
+  blue: "#36C5F0",
+  yellow: "#ECB22E",
+};
+
+const DEFAULT_GENERAL_COLOR = "pink";
+const DEFAULT_PERSONAL_COLOR = "red";
+
 const BADGE_RADIUS = 6.9;
 const BADGE_CENTER_X = 25.1;
 const BADGE_CENTER_Y = 6.9;
-const PERSONAL_FILL = "#E01E5A";
 const PERSONAL_STROKE = "#FFFFFF";
-const GENERAL_STROKE = "#FF5FA2";
-const GENERAL_LINE_WIDTH = 2.2;
+const GENERAL_LINE_WIDTH = 4.4;
 const PERSONAL_LINE_WIDTH = 1.15;
+
+/**
+ * @param {string|undefined} colorKey
+ * @param {string} fallbackColor
+ * @returns {string}
+ */
+function resolveNotificationColor(colorKey, fallbackColor) {
+  if (colorKey && COLOR_OPTIONS[colorKey]) {
+    return COLOR_OPTIONS[colorKey];
+  }
+  return COLOR_OPTIONS[fallbackColor];
+}
+
+/**
+ * @param {Object} nextSettings
+ * @returns {Object}
+ */
+function normalizeColorSettings(nextSettings) {
+  return {
+    ...nextSettings,
+    generalColor: COLOR_OPTIONS[nextSettings.generalColor]
+      ? nextSettings.generalColor
+      : DEFAULT_GENERAL_COLOR,
+    personalColor: COLOR_OPTIONS[nextSettings.personalColor]
+      ? nextSettings.personalColor
+      : DEFAULT_PERSONAL_COLOR,
+  };
+}
 
 // ============================================================================
 // Favicon Composition
@@ -89,12 +128,21 @@ function composeFavicon(iconDataUrl, markType) {
 
     const img = new Image();
     img.onload = () => {
+      const personalFill = resolveNotificationColor(
+        settings?.personalColor,
+        DEFAULT_PERSONAL_COLOR
+      );
+      const generalStroke = resolveNotificationColor(
+        settings?.generalColor,
+        DEFAULT_GENERAL_COLOR
+      );
+
       ctx.drawImage(img, 0, 0, 32, 32);
 
       if (markType === UNREAD_STATE.PERSONAL) {
         ctx.beginPath();
         ctx.arc(BADGE_CENTER_X, BADGE_CENTER_Y, BADGE_RADIUS, 0, Math.PI * 2);
-        ctx.fillStyle = PERSONAL_FILL;
+        ctx.fillStyle = personalFill;
         ctx.fill();
         ctx.strokeStyle = PERSONAL_STROKE;
         ctx.lineWidth = PERSONAL_LINE_WIDTH;
@@ -102,7 +150,7 @@ function composeFavicon(iconDataUrl, markType) {
       } else if (markType === UNREAD_STATE.GENERAL) {
         ctx.beginPath();
         ctx.arc(BADGE_CENTER_X, BADGE_CENTER_Y, BADGE_RADIUS, 0, Math.PI * 2);
-        ctx.strokeStyle = GENERAL_STROKE;
+        ctx.strokeStyle = generalStroke;
         ctx.lineWidth = GENERAL_LINE_WIDTH;
         ctx.stroke();
       }
@@ -609,6 +657,26 @@ async function fetchAndCacheIcons(teamIconUrl) {
   }
 }
 
+/**
+ * Recomposes cached favicon variants using current settings.
+ * @returns {Promise<boolean>} True when recomposition succeeds.
+ */
+async function recomposeCachedIcons() {
+  if (!iconCache.teamIconDataUrl || !iconCache.teamIconDataUrl.startsWith("data:")) {
+    return false;
+  }
+
+  try {
+    iconCache.normalFavicon = await composeFavicon(iconCache.teamIconDataUrl, UNREAD_STATE.NONE);
+    iconCache.generalUnreadFavicon = await composeFavicon(iconCache.teamIconDataUrl, UNREAD_STATE.GENERAL);
+    iconCache.personalUnreadFavicon = await composeFavicon(iconCache.teamIconDataUrl, UNREAD_STATE.PERSONAL);
+    return true;
+  } catch (error) {
+    logDebug("Error recomposing icons:", error?.message || error);
+    return false;
+  }
+}
+
 // ============================================================================
 // Initialization
 // ============================================================================
@@ -622,7 +690,7 @@ async function init() {
 
   try {
     // Load settings
-    settings = await chrome.storage.local.get(defaultSettings);
+    settings = normalizeColorSettings(await chrome.storage.local.get(defaultSettings));
     logDebug("Settings loaded", settings);
 
     // Get current workspace
@@ -781,14 +849,29 @@ async function init() {
     }).observe(document.body, { childList: true, subtree: true });
 
     // Listen for settings changes
-    chrome.storage.onChanged.addListener((changes, area) => {
+    chrome.storage.onChanged.addListener(async (changes, area) => {
       if (area === "local") {
         logDebug("Settings changed", changes);
         const newSettings = {};
         for (const key of Object.keys(changes)) {
           newSettings[key] = changes[key].newValue;
         }
-        settings = { ...settings, ...newSettings };
+
+        const colorChanged =
+          Object.prototype.hasOwnProperty.call(newSettings, "generalColor") ||
+          Object.prototype.hasOwnProperty.call(newSettings, "personalColor");
+
+        settings = normalizeColorSettings({ ...settings, ...newSettings });
+
+        if (colorChanged) {
+          const refreshed = await recomposeCachedIcons();
+          logDebug("Notification colors updated", {
+            refreshed,
+            generalColor: settings.generalColor,
+            personalColor: settings.personalColor,
+          });
+        }
+
         applyFavicon(settings, icons);
       }
     });

@@ -16,6 +16,11 @@ const showNotificationDotCheckbox = document.getElementById("showNotificationDot
 /** @type {HTMLInputElement} Debug mode checkbox */
 const debugModeCheckbox = document.getElementById("debugMode");
 
+/** @type {NodeListOf<HTMLButtonElement>} Color option buttons */
+const colorOptionButtons = document.querySelectorAll(".color-option");
+
+const ALLOWED_COLORS = ["pink", "red", "green", "blue", "yellow"];
+
 // ============================================================================
 // Default Settings
 // ============================================================================
@@ -25,6 +30,8 @@ const defaultSettings = {
   enable: false,
   showDot: false,
   debug: false,
+  generalColor: "pink",
+  personalColor: "red",
 };
 
 // ============================================================================
@@ -51,6 +58,17 @@ async function loadSettings() {
   enableExtensionCheckbox.checked = settings.enable;
   showNotificationDotCheckbox.checked = settings.showDot;
   debugModeCheckbox.checked = settings.debug;
+
+  const generalColor = ALLOWED_COLORS.includes(settings.generalColor)
+    ? settings.generalColor
+    : defaultSettings.generalColor;
+  const personalColor = ALLOWED_COLORS.includes(settings.personalColor)
+    ? settings.personalColor
+    : defaultSettings.personalColor;
+
+  setColorSelection("generalColor", generalColor);
+  setColorSelection("personalColor", personalColor);
+
   updateDependentControls();
 }
 
@@ -83,10 +101,41 @@ function setupEventListeners() {
 
   showNotificationDotCheckbox.addEventListener("change", () => {
     saveSettings({ showDot: showNotificationDotCheckbox.checked });
+    updateDependentControls();
   });
 
   debugModeCheckbox.addEventListener("change", () => {
     saveSettings({ debug: debugModeCheckbox.checked });
+  });
+
+  colorOptionButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      const colorTarget = button.dataset.colorTarget;
+      const color = button.dataset.color;
+      if (!colorTarget || !color || !ALLOWED_COLORS.includes(color)) {
+        return;
+      }
+
+      setColorSelection(colorTarget, color);
+      saveSettings({ [colorTarget]: color });
+    });
+  });
+}
+
+/**
+ * Marks the selected color in a picker group.
+ * @param {string} colorTarget
+ * @param {string} selectedColor
+ */
+function setColorSelection(colorTarget, selectedColor) {
+  const options = document.querySelectorAll(
+    `.color-option[data-color-target="${colorTarget}"]`
+  );
+
+  options.forEach((option) => {
+    const isSelected = option.dataset.color === selectedColor;
+    option.classList.toggle("selected", isSelected);
+    option.setAttribute("aria-pressed", isSelected ? "true" : "false");
   });
 }
 
@@ -95,8 +144,24 @@ function setupEventListeners() {
  */
 function updateDependentControls() {
   const isEnabled = enableExtensionCheckbox.checked;
+  const colorPickersEnabled = isEnabled && showNotificationDotCheckbox.checked;
+
   showNotificationDotCheckbox.disabled = !isEnabled;
   showNotificationDotCheckbox.parentElement.style.opacity = isEnabled ? "1" : "0.5";
   debugModeCheckbox.disabled = !isEnabled;
   debugModeCheckbox.parentElement.style.opacity = isEnabled ? "1" : "0.5";
+
+  colorOptionButtons.forEach((button) => {
+    button.disabled = !colorPickersEnabled;
+  });
+
+  const generalColorGroup = document.getElementById("generalColorGroup");
+  if (generalColorGroup) {
+    generalColorGroup.style.opacity = colorPickersEnabled ? "1" : "0.5";
+  }
+
+  const personalColorGroup = document.getElementById("personalColorGroup");
+  if (personalColorGroup) {
+    personalColorGroup.style.opacity = colorPickersEnabled ? "1" : "0.5";
+  }
 }
