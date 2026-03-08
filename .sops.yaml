@@ -1,0 +1,14 @@
+keys:
+  - &agow age1xy6hevtwpq84wrfaqtn80rv3fmzst50jq6e4km432zznqyf2eszsj5mq58 # Added manually
+  - &phow age13xg72atrj6merzcvtygyte94jynlg4ca6v84kz87xq44w6y9546sde8kms # phobobhobia wsl2
+  - &oracle-arm64 age1jndhu0tqy3rtqsjynxudjhsx8l5dqylszxxgc6dz54dzteg6g40qa686mx
+  - &nix-sp age1c74jm66n9cxhq3z8zezaupmzxmqjy7hhx5ylt7d5xrxg8m4v8prqsax4s2
+
+creation_rules:
+  - path_regex: (.*\.(yaml|json|env)|(lxc|hosts)/.*\.yaml)$
+    key_groups:
+      - age:
+          - *agow
+          - *phow
+          - *oracle-arm64
+          - *nix-sp
