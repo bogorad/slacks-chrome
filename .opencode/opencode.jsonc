@@ -1,0 +1,16 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "serena": {
+      "enabled": true,
+      "type": "local",
+      "command": [
+        "nix",
+        "run",
+        "github:oraios/serena",
+        "--",
+        "start-mcp-server"
+      ]
+    }
+  }
+}
