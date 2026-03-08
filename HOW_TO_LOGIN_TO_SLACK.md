@@ -1,6 +1,6 @@
 # How To Login To Slack (Automation Notes)
 
-This document captures the currently working automation flow for Slack login in this repo.
+This document captures an automation flow for Slack login in this repo.
 
 ## Tools and Inputs
 
@@ -12,9 +12,9 @@ This document captures the currently working automation flow for Slack login in 
 - IMAP secrets file (sops-encrypted): `secrets.yaml`
 - Browser automation: `agent-browser`
 
-## Environment Gotcha (Important)
+## Environment Notes
 
-On this host, Playwright's bundled browser fails to launch (NixOS dynamic linker issue). Always use system Chromium:
+On this host, Playwright's bundled browser fails to launch (NixOS dynamic linker issue). Use system Chromium:
 
 ```bash
 AGENT_BROWSER_EXECUTABLE_PATH=/run/current-system/sw/bin/chromium
@@ -70,7 +70,7 @@ curl -sS "https://2captcha.com/res.php?key=$KEY&action=get&id=<REQUEST_ID>&json=
 
 When ready, response has `status=1` and token in `request`.
 
-## Token Injection Details (Critical)
+## Token Injection Details
 
 Passing token directly to callback is not enough. Slack callback reads token from `grecaptcha.enterprise.getResponse()` (fallback `grecaptcha.getResponse()`).
 
@@ -78,7 +78,7 @@ Observed callback path:
 
 - `window.___grecaptcha_cfg.clients["0"].D.D.callback`
 
-Reliable submit sequence:
+Observed submit sequence:
 
 1. Set `textarea[name="g-recaptcha-response"]` to token.
 2. Monkeypatch:
@@ -136,17 +136,17 @@ AGENT_BROWSER_EXECUTABLE_PATH=/run/current-system/sw/bin/chromium \
 chmod 600 /home/chuck/git/slacks-chrome/.slack-links-and-pics-cookies.json
 ```
 
-This file was validated by importing cookies into a fresh session and opening:
+To reuse cookies in a fresh session, open:
 
 ```bash
 https://app.slack.com/client/T0DBFLVJP/C0DBFM0HH
 ```
 
-without re-running full login.
+This can avoid re-running full login.
 
 ## Troubleshooting Notes
 
 - Generic sign-in can stall with disabled `Sign In With Email` if captcha token was not accepted.
 - If message does not arrive, use Slack `Request a new code` and poll IMAP again.
 - Workspace/password route for `links-and-pics` previously returned incorrect email/password with current vault credentials.
-- Generic email-code route is currently the reliable path in this environment.
+- Generic email-code route has worked in this environment.
