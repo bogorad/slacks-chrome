@@ -1,6 +1,7 @@
 ## General instructions
 
 - For long-running operations use subagents.
+- Use all tools provided by Serena-mcp.
 - On ANY code or docs change (however small), bump patch version `zz` in `xx.yy.zz` across all relevant places before finishing work (at minimum `manifest.json` and popup version text in `popup/popup.html`, plus any other version surfaces in this repo).
 
 ## Beads usage

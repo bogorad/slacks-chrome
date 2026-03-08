@@ -143,15 +143,17 @@ Rendering is in `composeFavicon(iconDataUrl, markType)`.
 
 ### Personal marker (filled)
 
-- fill: `#E01E5A`
+- fill: user-selected `personalColor` (default `#E01E5A`)
 - stroke: `#FFFFFF`
 - stroke width: `1.15`
 
 ### General marker (ring)
 
-- stroke: `#FF5FA2`
+- stroke: user-selected `generalColor` (default `#FF5FA2`)
 - stroke width: `4.4`
 - transparent center
+
+Color options for both markers are: `pink`, `red`, `green`, `blue`, `yellow`.
 
 ---
 
@@ -163,8 +165,8 @@ Rendering is in `composeFavicon(iconDataUrl, markType)`.
 - if enabled and `showDot` is false -> normal workspace favicon
 - if enabled and `showDot` is true:
   - `none` -> normal favicon
-  - `general` -> pink ring favicon
-  - `personal` -> red filled favicon
+  - `general` -> ring favicon using `generalColor`
+  - `personal` -> filled favicon using `personalColor`
 
 Note: `showDot` now effectively means "show unread marker" (ring or filled).
 
@@ -172,13 +174,15 @@ Note: `showDot` now effectively means "show unread marker" (ring or filled).
 
 ## 7) Settings and Popup
 
-Popup script remains simple and unchanged in behavior:
+Settings stored in `chrome.storage.local`:
 
 - `enable`
 - `showDot`
 - `debug`
+- `generalColor`
+- `personalColor`
 
-Popup CSS was refreshed for clarity and polish, but control IDs and storage keys are unchanged.
+Popup includes two clickable color picker groups (5 options each) for general ring and personal dot colors.
 
 ---
 
