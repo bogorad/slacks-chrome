@@ -19,7 +19,7 @@ const debugModeCheckbox = document.getElementById("debugMode");
 /** @type {NodeListOf<HTMLButtonElement>} Color option buttons */
 const colorOptionButtons = document.querySelectorAll(".color-option");
 
-const ALLOWED_COLORS = ["pink", "red", "green", "blue", "yellow"];
+const ALLOWED_COLORS = ["pink", "red", "green", "navy", "yellow"];
 
 // ============================================================================
 // Default Settings
@@ -33,6 +33,17 @@ const defaultSettings = {
   generalColor: "pink",
   personalColor: "red",
 };
+
+/**
+ * @param {string|undefined} colorValue
+ * @returns {string|undefined}
+ */
+function normalizeColorValue(colorValue) {
+  if (colorValue === "blue") {
+    return "navy";
+  }
+  return colorValue;
+}
 
 // ============================================================================
 // Initialization
@@ -59,12 +70,19 @@ async function loadSettings() {
   showNotificationDotCheckbox.checked = settings.showDot;
   debugModeCheckbox.checked = settings.debug;
 
-  const generalColor = ALLOWED_COLORS.includes(settings.generalColor)
-    ? settings.generalColor
+  const normalizedGeneralColor = normalizeColorValue(settings.generalColor);
+  const normalizedPersonalColor = normalizeColorValue(settings.personalColor);
+
+  const generalColor = ALLOWED_COLORS.includes(normalizedGeneralColor)
+    ? normalizedGeneralColor
     : defaultSettings.generalColor;
-  const personalColor = ALLOWED_COLORS.includes(settings.personalColor)
-    ? settings.personalColor
+  const personalColor = ALLOWED_COLORS.includes(normalizedPersonalColor)
+    ? normalizedPersonalColor
     : defaultSettings.personalColor;
+
+  if (settings.generalColor !== generalColor || settings.personalColor !== personalColor) {
+    saveSettings({ generalColor, personalColor });
+  }
 
   setColorSelection("generalColor", generalColor);
   setColorSelection("personalColor", personalColor);

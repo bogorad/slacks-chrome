@@ -67,7 +67,7 @@ const COLOR_OPTIONS = {
   pink: "#FF5FA2",
   red: "#E01E5A",
   green: "#2EB67D",
-  blue: "#36C5F0",
+  navy: "#1F2A6A",
   yellow: "#ECB22E",
 };
 
@@ -83,12 +83,24 @@ const PERSONAL_LINE_WIDTH = 1.15;
 
 /**
  * @param {string|undefined} colorKey
+ * @returns {string|undefined}
+ */
+function normalizeColorKey(colorKey) {
+  if (colorKey === "blue") {
+    return "navy";
+  }
+  return colorKey;
+}
+
+/**
+ * @param {string|undefined} colorKey
  * @param {string} fallbackColor
  * @returns {string}
  */
 function resolveNotificationColor(colorKey, fallbackColor) {
-  if (colorKey && COLOR_OPTIONS[colorKey]) {
-    return COLOR_OPTIONS[colorKey];
+  const normalizedColor = normalizeColorKey(colorKey);
+  if (normalizedColor && COLOR_OPTIONS[normalizedColor]) {
+    return COLOR_OPTIONS[normalizedColor];
   }
   return COLOR_OPTIONS[fallbackColor];
 }
@@ -98,13 +110,16 @@ function resolveNotificationColor(colorKey, fallbackColor) {
  * @returns {Object}
  */
 function normalizeColorSettings(nextSettings) {
+  const normalizedGeneralColor = normalizeColorKey(nextSettings.generalColor);
+  const normalizedPersonalColor = normalizeColorKey(nextSettings.personalColor);
+
   return {
     ...nextSettings,
-    generalColor: COLOR_OPTIONS[nextSettings.generalColor]
-      ? nextSettings.generalColor
+    generalColor: COLOR_OPTIONS[normalizedGeneralColor]
+      ? normalizedGeneralColor
       : DEFAULT_GENERAL_COLOR,
-    personalColor: COLOR_OPTIONS[nextSettings.personalColor]
-      ? nextSettings.personalColor
+    personalColor: COLOR_OPTIONS[normalizedPersonalColor]
+      ? normalizedPersonalColor
       : DEFAULT_PERSONAL_COLOR,
   };
 }

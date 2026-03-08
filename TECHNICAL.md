@@ -153,7 +153,7 @@ Rendering is in `composeFavicon(iconDataUrl, markType)`.
 - stroke width: `4.4`
 - transparent center
 
-Color options for both markers are: `pink`, `red`, `green`, `blue`, `yellow`.
+Color options for both markers are: `pink`, `red`, `green`, `navy`, `yellow`.
 
 ---
 

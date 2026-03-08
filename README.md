@@ -9,6 +9,6 @@ It also adds unread markers on top of that icon:
 - general unread activity -> ring marker
 - personal unread activity (mentions/DM/thread attention) -> filled marker
 
-Both marker colors are configurable in the popup (pink, red, green, blue, yellow).
+Both marker colors are configurable in the popup (pink, red, green, navy, yellow).
 
 For implementation details, detection logic, rendering behavior, and selector/debounce notes, see `TECHNICAL.md`.
