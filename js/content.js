@@ -11,17 +11,36 @@
 const iconCache = {
   teamIconDataUrl: null, // Base64 data URL of original workspace icon
   normalFavicon: null, // Composed favicon without badge
-  unreadFavicon: null, // Composed favicon with red dot badge
+  generalUnreadFavicon: null, // Composed favicon with pink ring badge
+  personalUnreadFavicon: null, // Composed favicon with red filled badge
 };
 
-/** @type {boolean} Current unread state */
-let hasUnread = false;
+const UNREAD_STATE = {
+  NONE: "none",
+  GENERAL: "general",
+  PERSONAL: "personal",
+};
+
+const UNREAD_PRIORITY = {
+  [UNREAD_STATE.NONE]: 0,
+  [UNREAD_STATE.GENERAL]: 1,
+  [UNREAD_STATE.PERSONAL]: 2,
+};
+
+/** @type {string} Current unread state */
+let unreadState = UNREAD_STATE.NONE;
 
 /** @type {number} Counter for consecutive "no unreads" polls (for debouncing) */
 let consecutiveNoUnreads = 0;
 
-/** @type {number} Required consecutive "no unreads" polls before switching to false */
+/** @type {number} Counter for consecutive PERSONAL -> GENERAL downgrade polls */
+let consecutivePersonalDowngradePolls = 0;
+
+/** @type {number} Required consecutive "no unreads" polls before switching to NONE */
 const REQUIRED_NO_UNREAD_POLLS = 3;
+
+/** @type {number} Required consecutive polls before PERSONAL -> GENERAL downgrade */
+const REQUIRED_PERSONAL_DOWNGRADE_POLLS = 2;
 
 /** @type {string|null} Current workspace name */
 let currentWorkspace = null;
@@ -42,17 +61,26 @@ const defaultSettings = {
 /** @type {Object} Extension settings */
 let settings;
 
+const BADGE_RADIUS = 6.9;
+const BADGE_CENTER_X = 25.1;
+const BADGE_CENTER_Y = 6.9;
+const PERSONAL_FILL = "#E01E5A";
+const PERSONAL_STROKE = "#FFFFFF";
+const GENERAL_STROKE = "#FF5FA2";
+const GENERAL_LINE_WIDTH = 2.2;
+const PERSONAL_LINE_WIDTH = 1.15;
+
 // ============================================================================
 // Favicon Composition
 // ============================================================================
 
 /**
- * Composes a favicon with optional unread badge
+ * Composes a favicon with optional unread marker
  * @param {string} iconDataUrl - Base64 data URL of the workspace icon
- * @param {boolean} showBadge - Whether to show the red notification dot
+ * @param {string} markType - One of UNREAD_STATE values
  * @returns {Promise<string>} A promise resolving to the composed favicon data URL
  */
-function composeFavicon(iconDataUrl, showBadge) {
+function composeFavicon(iconDataUrl, markType) {
   return new Promise((resolve, reject) => {
     const canvas = document.createElement("canvas");
     canvas.width = 32;
@@ -61,17 +89,21 @@ function composeFavicon(iconDataUrl, showBadge) {
 
     const img = new Image();
     img.onload = () => {
-      // Draw workspace icon
       ctx.drawImage(img, 0, 0, 32, 32);
 
-      if (showBadge) {
-        // Draw red dot at top-right
+      if (markType === UNREAD_STATE.PERSONAL) {
         ctx.beginPath();
-        ctx.arc(26, 6, 6, 0, Math.PI * 2);
-        ctx.fillStyle = "#E01E5A"; // Slack red
+        ctx.arc(BADGE_CENTER_X, BADGE_CENTER_Y, BADGE_RADIUS, 0, Math.PI * 2);
+        ctx.fillStyle = PERSONAL_FILL;
         ctx.fill();
-        ctx.strokeStyle = "white";
-        ctx.lineWidth = 1;
+        ctx.strokeStyle = PERSONAL_STROKE;
+        ctx.lineWidth = PERSONAL_LINE_WIDTH;
+        ctx.stroke();
+      } else if (markType === UNREAD_STATE.GENERAL) {
+        ctx.beginPath();
+        ctx.arc(BADGE_CENTER_X, BADGE_CENTER_Y, BADGE_RADIUS, 0, Math.PI * 2);
+        ctx.strokeStyle = GENERAL_STROKE;
+        ctx.lineWidth = GENERAL_LINE_WIDTH;
         ctx.stroke();
       }
 
@@ -126,30 +158,141 @@ const SLACK_UNREAD_FAVICON_SIGNATURES = [
 const SLACK_NORMAL_FAVICON_SIGNATURE = "iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAA";
 
 /**
- * Detects if there are unread messages using multiple strategies:
- * 1. Check Slack's favicon URL for "urgent" pattern
- * 2. Check for unread badge elements in the sidebar
- * 3. Check document title for unread indicators
- * @returns {boolean} True if unreads detected
+ * @param {Element|null} element
+ * @returns {boolean}
  */
-function detectUnreadFromFavicon() {
-  // Strategy 1: Check raw favicon href for "urgent" pattern (works if Slack uses file URLs)
+function isElementVisible(element) {
+  if (!element) return false;
+  const style = getComputedStyle(element);
+  return style.display !== "none" && style.visibility !== "hidden";
+}
+
+/**
+ * @param {Element|null} element
+ * @returns {boolean}
+ */
+function hasNumericUnreadCount(element) {
+  if (!element) return false;
+  const text = element.textContent?.trim();
+  return Boolean(text && /^\d+$/.test(text));
+}
+
+/**
+ * @param {string} href
+ * @returns {boolean}
+ */
+function isPersonalRouteHref(href) {
+  if (!href) return false;
+  return /\/client\/T[^/]+\/(D|G)[A-Z0-9]+/i.test(href)
+    || /\/threads/i.test(href)
+    || /\/mentions/i.test(href);
+}
+
+/**
+ * @param {Element|null} element
+ * @returns {boolean}
+ */
+function isPersonalElement(element) {
+  if (!element) return false;
+  const anchor = element.closest("a") || (element.matches("a") ? element : null);
+  const href = anchor?.getAttribute("href") || "";
+  if (isPersonalRouteHref(href)) return true;
+
+  const dataQa = [
+    element.getAttribute?.("data-qa") || "",
+    anchor?.getAttribute?.("data-qa") || "",
+  ].join(" ");
+  return /mentions|threads|im_list|dm/i.test(dataQa);
+}
+
+/**
+ * @param {Element} container
+ * @returns {boolean}
+ */
+function hasVisibleUnreadBadge(container) {
+  const badges = container.querySelectorAll(
+    '.p-channel_sidebar__badge, ' +
+    '.c-mention_badge, ' +
+    '[data-qa="channel_sidebar_unreads"], ' +
+    '.p-unreads_bar, ' +
+    '.c-unified_member__secondary-name--with-badge'
+  );
+
+  for (const badge of badges) {
+    if (!isElementVisible(badge)) continue;
+    if (hasNumericUnreadCount(badge)) return true;
+  }
+  return false;
+}
+
+/**
+ * @returns {{matched: boolean, reasons: string[]}}
+ */
+function detectPersonalUnreadSignals() {
+  const reasons = [];
+
+  const mentionBadges = document.querySelectorAll(".c-mention_badge");
+  for (const badge of mentionBadges) {
+    if (isElementVisible(badge) && hasNumericUnreadCount(badge)) {
+      reasons.push("mention_badge");
+      break;
+    }
+  }
+
+  const personalUnreadItems = document.querySelectorAll(
+    '.p-channel_sidebar__channel--unread, ' +
+    '.p-channel_sidebar__link--unread, ' +
+    '[data-qa-unread="true"]'
+  );
+
+  for (const item of personalUnreadItems) {
+    if (!isElementVisible(item) && !isElementVisible(item.closest("a"))) continue;
+    if (isPersonalElement(item)) {
+      reasons.push("personal_unread_row");
+      break;
+    }
+  }
+
+  const personalContainers = document.querySelectorAll(
+    'a[href*="/client/"][href*="/D"], ' +
+    'a[href*="/client/"][href*="/G"], ' +
+    'a[href*="/threads"], ' +
+    'a[href*="/mentions"], ' +
+    '[data-qa*="threads"], ' +
+    '[data-qa*="mentions"]'
+  );
+
+  for (const container of personalContainers) {
+    if (!isElementVisible(container)) continue;
+    if (container.matches('.p-channel_sidebar__channel--unread, .p-channel_sidebar__link--unread, [data-qa-unread="true"]')
+      || hasVisibleUnreadBadge(container)) {
+      reasons.push("personal_nav_badge");
+      break;
+    }
+  }
+
+  return {
+    matched: reasons.length > 0,
+    reasons,
+  };
+}
+
+/**
+ * @returns {{matched: boolean, reasons: string[]}}
+ */
+function detectGeneralUnreadSignals() {
+  const reasons = [];
+
   const rawHref = getCurrentFaviconRaw();
   if (/favicon[_-]?(urgent|unread)/i.test(rawHref)) {
-    logDebug("detectUnread: found via favicon URL pattern", { rawHref });
-    return true;
+    reasons.push("favicon_url_pattern");
   }
 
-  // Strategy 2: Check document title for unread indicators
-  // Slack may prefix with "*" or "(N)" for unreads
   const title = document.title;
   if (/^[*!]/.test(title) || /^\(\d+\)/.test(title)) {
-    logDebug("detectUnread: found via title prefix", { title });
-    return true;
+    reasons.push("title_prefix");
   }
 
-  // Strategy 3: Check for unread badge/indicator elements in the sidebar
-  // Slack uses various elements to show unread counts
   const unreadIndicators = document.querySelectorAll(
     '.p-channel_sidebar__badge, ' +
     '.c-mention_badge, ' +
@@ -157,33 +300,142 @@ function detectUnreadFromFavicon() {
     '.p-unreads_bar, ' +
     '.c-unified_member__secondary-name--with-badge'
   );
-  
+
   for (const indicator of unreadIndicators) {
-    // Check if the indicator is visible and has content
-    const style = getComputedStyle(indicator);
-    if (style.display !== 'none' && style.visibility !== 'hidden') {
-      const text = indicator.textContent?.trim();
-      // Badge with a number means unreads
-      if (text && /^\d+$/.test(text)) {
-        logDebug("detectUnread: found via sidebar badge", { text, element: indicator.className });
-        return true;
-      }
-    }
+    if (!isElementVisible(indicator)) continue;
+    if (!hasNumericUnreadCount(indicator)) continue;
+    if (indicator.matches(".c-mention_badge") || isPersonalElement(indicator)) continue;
+
+    reasons.push("sidebar_unread_badge");
+    break;
   }
 
-  // Strategy 4: Check for channels/DMs with unread styling
   const unreadChannels = document.querySelectorAll(
     '.p-channel_sidebar__channel--unread, ' +
     '.p-channel_sidebar__link--unread, ' +
     '[data-qa-unread="true"]'
   );
-  if (unreadChannels.length > 0) {
-    logDebug("detectUnread: found via unread channel classes", { count: unreadChannels.length });
+  for (const channel of unreadChannels) {
+    if (!isElementVisible(channel) && !isElementVisible(channel.closest("a"))) continue;
+    if (isPersonalElement(channel)) continue;
+
+    reasons.push("unread_channel_row");
+    break;
+  }
+
+  return {
+    matched: reasons.length > 0,
+    reasons,
+  };
+}
+
+/**
+ * Detects unread state for NONE | GENERAL | PERSONAL.
+ * @returns {{state: string, reasons: string[], evidence: {personal: string[], general: string[]}}}
+ */
+function detectUnreadState() {
+  const personalSignals = detectPersonalUnreadSignals();
+  if (personalSignals.matched) {
+    return {
+      state: UNREAD_STATE.PERSONAL,
+      reasons: personalSignals.reasons,
+      evidence: {
+        personal: personalSignals.reasons,
+        general: [],
+      },
+    };
+  }
+
+  const generalSignals = detectGeneralUnreadSignals();
+  if (generalSignals.matched) {
+    return {
+      state: UNREAD_STATE.GENERAL,
+      reasons: generalSignals.reasons,
+      evidence: {
+        personal: [],
+        general: generalSignals.reasons,
+      },
+    };
+  }
+
+  return {
+    state: UNREAD_STATE.NONE,
+    reasons: [],
+    evidence: {
+      personal: [],
+      general: [],
+    },
+  };
+}
+
+/**
+ * Compatibility wrapper: true if unread state is not NONE.
+ * @returns {boolean}
+ */
+function detectUnreadFromFavicon() {
+  return detectUnreadState().state !== UNREAD_STATE.NONE;
+}
+
+/**
+ * @param {string} nextState
+ * @param {string} source
+ * @returns {boolean}
+ */
+function updateUnreadState(nextState, source) {
+  const currentPriority = UNREAD_PRIORITY[unreadState];
+  const nextPriority = UNREAD_PRIORITY[nextState];
+  const isPeriodicSource = source === "periodic_poll";
+
+  if (nextState === unreadState) {
+    if (nextState !== UNREAD_STATE.NONE) {
+      consecutiveNoUnreads = 0;
+      consecutivePersonalDowngradePolls = 0;
+    }
+    return false;
+  }
+
+  if (nextPriority > currentPriority) {
+    unreadState = nextState;
+    consecutiveNoUnreads = 0;
+    consecutivePersonalDowngradePolls = 0;
+    logDebug("Unread state transition", { source, nextState, unreadState });
     return true;
   }
 
-  logDebug("detectUnread: no unreads found", { rawHref: rawHref.substring(0, 50) + "..." });
-  return false;
+  if (nextState === UNREAD_STATE.NONE) {
+    if (!isPeriodicSource) {
+      return false;
+    }
+
+    consecutiveNoUnreads += 1;
+    if (consecutiveNoUnreads < REQUIRED_NO_UNREAD_POLLS) {
+      return false;
+    }
+
+    unreadState = UNREAD_STATE.NONE;
+    consecutiveNoUnreads = 0;
+    consecutivePersonalDowngradePolls = 0;
+    logDebug("Unread state transition", { source, nextState, unreadState });
+    return true;
+  }
+
+  if (unreadState === UNREAD_STATE.PERSONAL && nextState === UNREAD_STATE.GENERAL) {
+    if (!isPeriodicSource) {
+      return false;
+    }
+
+    consecutivePersonalDowngradePolls += 1;
+    consecutiveNoUnreads = 0;
+    if (consecutivePersonalDowngradePolls < REQUIRED_PERSONAL_DOWNGRADE_POLLS) {
+      return false;
+    }
+  }
+
+  unreadState = nextState;
+  consecutiveNoUnreads = 0;
+  consecutivePersonalDowngradePolls = 0;
+  logDebug("Unread state transition", { source, nextState });
+  return true;
 }
 
 /**
@@ -266,13 +518,45 @@ async function waitForTeamIcon(maxRetries = 10, delayMs = 500) {
 function updateFavicon(href) {
   document
     .querySelectorAll('link[rel="icon"], link[rel="shortcut icon"]')
-    .forEach((node) => node.remove());
+    .forEach((node) => {
+      node.remove();
+    });
   const link = document.createElement("link");
   link.rel = "icon";
   link.type = "image/png";
   link.href = href;
   document.head.appendChild(link);
   logDebug("Favicon updated: ", href);
+}
+
+/**
+ * Returns the correct favicon for current settings and unread state.
+ * @param {Object} settings
+ * @param {Object} icons
+ * @returns {string|null}
+ */
+function getFaviconForState(settings, icons) {
+  if (!settings.enable) {
+    return icons.defaultIcon || null;
+  }
+
+  if (!iconCache.normalFavicon) {
+    return icons.teamIcon || null;
+  }
+
+  if (!settings.showDot || unreadState === UNREAD_STATE.NONE) {
+    return iconCache.normalFavicon;
+  }
+
+  if (unreadState === UNREAD_STATE.PERSONAL) {
+    return iconCache.personalUnreadFavicon || iconCache.normalFavicon;
+  }
+
+  if (unreadState === UNREAD_STATE.GENERAL) {
+    return iconCache.generalUnreadFavicon || iconCache.normalFavicon;
+  }
+
+  return iconCache.normalFavicon;
 }
 
 /**
@@ -283,21 +567,9 @@ function updateFavicon(href) {
  * @param {string} icons.teamIcon - Team icon URL
  */
 function applyFavicon(settings, icons) {
-  if (!settings.enable) {
-    if (icons.defaultIcon) {
-      updateFavicon(icons.defaultIcon);
-    }
-    return;
-  }
-
-  if (iconCache.normalFavicon) {
-    const favicon =
-      hasUnread && settings.showDot
-        ? iconCache.unreadFavicon
-        : iconCache.normalFavicon;
+  const favicon = getFaviconForState(settings, icons);
+  if (favicon) {
     updateFavicon(favicon);
-  } else {
-    updateFavicon(icons.teamIcon);
   }
 }
 
@@ -322,15 +594,17 @@ async function fetchAndCacheIcons(teamIconUrl) {
     }
 
     iconCache.teamIconDataUrl = response.dataUrl;
-    iconCache.normalFavicon = await composeFavicon(response.dataUrl, false);
-    iconCache.unreadFavicon = await composeFavicon(response.dataUrl, true);
+    iconCache.normalFavicon = await composeFavicon(response.dataUrl, UNREAD_STATE.NONE);
+    iconCache.generalUnreadFavicon = await composeFavicon(response.dataUrl, UNREAD_STATE.GENERAL);
+    iconCache.personalUnreadFavicon = await composeFavicon(response.dataUrl, UNREAD_STATE.PERSONAL);
     return { success: true };
   } catch (err) {
     logDebug("Error fetching icon, using direct URL:", err.message);
     // Fall back to direct URL (may fail on toDataURL but shows icon)
     iconCache.teamIconDataUrl = teamIconUrl;
     iconCache.normalFavicon = null;
-    iconCache.unreadFavicon = null;
+    iconCache.generalUnreadFavicon = null;
+    iconCache.personalUnreadFavicon = null;
     return { success: false };
   }
 }
@@ -378,9 +652,12 @@ async function init() {
     await fetchAndCacheIcons(teamIconUrl);
     logDebug("Icon cache populated", iconCache);
 
-    // Detect initial unread state from favicon URL (Slack uses favicon-urgent.ico for unreads)
-    hasUnread = detectUnreadFromFavicon();
-    logDebug("Initial unread state from favicon:", { hasUnread });
+    // Detect initial unread state
+    const initialUnread = detectUnreadState();
+    unreadState = initialUnread.state;
+    consecutiveNoUnreads = 0;
+    consecutivePersonalDowngradePolls = 0;
+    logDebug("Initial unread state", initialUnread);
 
     // Apply initial favicon
     applyFavicon(settings, icons);
@@ -396,8 +673,22 @@ async function init() {
 
     const headElement = document.querySelector("head");
 
-    new MutationObserver(async (mutations, observer) => {
-      // Watch for favicon changes (Slack's unread indicator)
+    const refreshUnreadState = (source) => {
+      const detection = detectUnreadState();
+      logDebug("Unread evidence", {
+        source,
+        state: detection.state,
+        reasons: detection.reasons,
+        evidence: detection.evidence,
+      });
+
+      const stateChanged = updateUnreadState(detection.state, source);
+      if (stateChanged) {
+        applyFavicon(settings, icons);
+      }
+    };
+
+    new MutationObserver((mutations) => {
       for (const mutation of mutations) {
         if (mutation.type === "childList") {
           for (const node of mutation.addedNodes) {
@@ -406,28 +697,12 @@ async function init() {
               if (relAttr && relAttr.value.includes("icon")) {
                 const newHref = node.attributes.href?.value || "";
                 logDebug("Icon node added, href:", newHref);
-                // Detect unread from favicon URL (Slack uses favicon-urgent.ico)
-                const newUnreadState = detectUnreadFromFavicon();
-                logDebug("Unread detection from favicon:", { newUnreadState });
-
-                // Apply debounced state change
-                if (newUnreadState) {
-                  consecutiveNoUnreads = 0;
-                  if (!hasUnread) {
-                    hasUnread = true;
-                    logDebug("Unread state changed: true");
-                  }
-                }
-                // Don't immediately set to false - let periodic polling handle debouncing
+                refreshUnreadState("favicon_link_added");
 
                 if (settings.enable) {
-                  // Use composed favicons if available, fall back to direct URL
-                  if (iconCache.normalFavicon) {
-                    node.href = (hasUnread && settings.showDot)
-                      ? iconCache.unreadFavicon
-                      : iconCache.normalFavicon;
-                  } else if (iconCache.teamIconDataUrl) {
-                    node.href = iconCache.teamIconDataUrl;
+                  const favicon = getFaviconForState(settings, icons) || iconCache.teamIconDataUrl;
+                  if (favicon) {
+                    node.href = favicon;
                   }
                 }
               }
@@ -443,34 +718,19 @@ async function init() {
 
               // Prevent infinite loop: skip if href is already our favicon
               if (newHref === iconCache.normalFavicon ||
-                  newHref === iconCache.unreadFavicon ||
+                  newHref === iconCache.generalUnreadFavicon ||
+                  newHref === iconCache.personalUnreadFavicon ||
                   newHref === iconCache.teamIconDataUrl) {
-                return;
+                continue;
               }
 
               logDebug("Icon href changed:", newHref);
-              // Detect unread from favicon URL (Slack uses favicon-urgent.ico)
-              const newUnreadState = detectUnreadFromFavicon();
-              logDebug("Unread detection from favicon:", { newUnreadState });
-
-              // Apply debounced state change
-              if (newUnreadState) {
-                consecutiveNoUnreads = 0;
-                if (!hasUnread) {
-                  hasUnread = true;
-                  logDebug("Unread state changed: true");
-                }
-              }
-              // Don't immediately set to false - let periodic polling handle debouncing
+              refreshUnreadState("favicon_href_changed");
 
               if (settings.enable) {
-                // Use composed favicons if available, fall back to direct URL
-                if (iconCache.normalFavicon) {
-                  node.href = (hasUnread && settings.showDot)
-                    ? iconCache.unreadFavicon
-                    : iconCache.normalFavicon;
-                } else if (iconCache.teamIconDataUrl) {
-                  node.href = iconCache.teamIconDataUrl;
+                const favicon = getFaviconForState(settings, icons) || iconCache.teamIconDataUrl;
+                if (favicon) {
+                  node.href = favicon;
                 }
               }
             }
@@ -498,8 +758,11 @@ async function init() {
             // Clear icon cache for new workspace
             iconCache.teamIconDataUrl = null;
             iconCache.normalFavicon = null;
-            iconCache.unreadFavicon = null;
-            hasUnread = false;
+            iconCache.generalUnreadFavicon = null;
+            iconCache.personalUnreadFavicon = null;
+            unreadState = UNREAD_STATE.NONE;
+            consecutiveNoUnreads = 0;
+            consecutivePersonalDowngradePolls = 0;
 
             // Fetch new team icon
             waitForTeamIcon().then(async (newIconUrl) => {
@@ -531,29 +794,19 @@ async function init() {
     });
 
     // Periodic unread state polling with debouncing
-    // Since Slack uses data URLs for favicons, we need to poll the DOM for unread indicators
-    // Debouncing prevents flapping during Slack's transient DOM states
     setInterval(() => {
-      if (!settings.enable || !settings.showDot || !iconCache.normalFavicon) return;
-      
-      const newUnreadState = detectUnreadFromFavicon();
-      
-      if (newUnreadState) {
-        // Unreads found - immediately set to true, reset counter
-        consecutiveNoUnreads = 0;
-        if (!hasUnread) {
-          hasUnread = true;
-          logDebug("Periodic check: unreads detected, showing dot");
-          applyFavicon(settings, icons);
-        }
-      } else {
-        // No unreads - require multiple consecutive polls before switching to false
-        consecutiveNoUnreads++;
-        if (hasUnread && consecutiveNoUnreads >= REQUIRED_NO_UNREAD_POLLS) {
-          hasUnread = false;
-          logDebug("Periodic check: no unreads for", consecutiveNoUnreads, "polls, hiding dot");
-          applyFavicon(settings, icons);
-        }
+      if (!settings.enable || !iconCache.normalFavicon) return;
+
+      const detection = detectUnreadState();
+      logDebug("Unread evidence", {
+        source: "periodic_poll",
+        state: detection.state,
+        reasons: detection.reasons,
+        evidence: detection.evidence,
+      });
+
+      if (updateUnreadState(detection.state, "periodic_poll")) {
+        applyFavicon(settings, icons);
       }
     }, 2000); // Check every 2 seconds
 
