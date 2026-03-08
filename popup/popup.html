@@ -8,11 +8,12 @@
   </head>
   <body>
     <div class="container">
-      <header>
+      <header class="popup-header">
         <h1>Slacks</h1>
+        <p class="subtitle">Slack favicon unread markers</p>
       </header>
 
-      <main>
+      <main class="settings-list">
         <div class="option-group">
           <label class="toggle-switch">
             <input type="checkbox" id="enableExtension" />
@@ -37,21 +38,15 @@
           </label>
         </div>
       </main>
-      <footer
-        style="
-          display: flex;
-          flex-direction: row;
-          justify-content: space-between;
-        "
-      >
-        <div>
+      <footer class="popup-footer">
+        <div class="credits">
           Made in 🇩🇪 by
-          <a href="https://www.suprematic.net" style="color: #bc0000"
+          <a class="brand-link" href="https://www.suprematic.net"
             >SUPREMATIC</a
           >
         </div>
 
-        <div style="color: grey">v1.1.10</div>
+        <div class="version">v1.1.10</div>
       </footer>
     </div>
 
