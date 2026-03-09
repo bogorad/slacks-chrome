@@ -218,6 +218,7 @@ Workspace icon extraction:
 | --------------------------------- | -------------------------------------- | ---------------------------------------------------------------- |
 | No marker ever appears            | selectors changed / no signals matched | enable `debug` and inspect unread evidence logs                  |
 | Marker appears but wrong type     | personal/general classification miss   | inspect `isPersonalElement` evidence (`href`, `data-qa`)         |
+| Ring disappears after a few seconds | Slack marks messages read after opening, then debounce clears state | expected with default `REQUIRED_NO_UNREAD_POLLS = 3` at 2s polling (~6s) |
 | Marker flickers during navigation | Slack SPA transient DOM                | verify debounce constants and poll-based downgrade path          |
 | No team icon badge rendering      | icon fetch/composition failed          | check background `fetchIcon` responses and icon cache population |
 

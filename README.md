@@ -11,4 +11,6 @@ It also adds unread markers on top of that icon:
 
 Both marker colors are configurable in the popup (pink, red, green, navy, yellow).
 
+Unread markers can clear shortly after you view a conversation because Slack marks messages read quickly; the extension then drops to no-marker state after its debounce window.
+
 For implementation details, detection logic, rendering behavior, and selector/debounce notes, see `TECHNICAL.md`.
