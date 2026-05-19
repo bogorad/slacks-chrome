@@ -31,7 +31,7 @@
             with pkgs;
             [
               # Development tools
-              nodejs_24
+              nodejs_25
               nodePackages.pnpm
               go
 

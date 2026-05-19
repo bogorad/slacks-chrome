@@ -5,6 +5,9 @@
 *.db-wal
 *.db-shm
 
+# Embedded Dolt working directory
+embeddeddolt/
+
 # Daemon runtime files
 daemon.lock
 daemon.log
