@@ -73,3 +73,7 @@
 
 sync:
     remote: "git+ssh://git@github.com/bogorad/slacks-chrome.git"
+dolt.database: "slacks_chrome"
+backup.enabled: false
+dolt.auto-push: false
+export.auto: false
