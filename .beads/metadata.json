@@ -1,4 +1,10 @@
 {
-  "database": "beads.db",
-  "jsonl_export": "issues.jsonl"
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "server",
+  "dolt_server_host": "doltsrv.kx35.com",
+  "dolt_server_port": 3307,
+  "dolt_server_user": "root",
+  "dolt_database": "slacks_chrome",
+  "project_id": "6d5e36af-42b1-460e-a8f2-6a27e23cfc87"
 }
